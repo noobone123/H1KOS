@@ -13,10 +13,7 @@ mov sp, 0x7c00
 
 mov ax, 0xb800 ; 0xb800 文本显示器的内存区域
 mov ds, ax
-mov byte [0], 'C'
-mov byte [1], 'W'
-mov byte [2], 'Y'
-mov byte [3], 'Z'
+mov byte [0], 'W'
 
 jmp $ ; 阻塞
 
