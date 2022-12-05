@@ -24,7 +24,7 @@ detect_memory:
     jc error
 
     add di, cx
-    inc word [ards_cnt]
+    inc dword [ards_cnt]
 
     cmp ebx, 0
     jnz .next
@@ -93,10 +93,86 @@ protect_mode:
     mov ss, ax ; 初始化段寄存器
     mov esp, 0x10000 ; 初始化栈顶指针
     
-    mov byte [0xb8000], 'P' ; 可以直接访问这里了内存了
-    mov byte [0x200000], 'P'
+    ; 把内核代码从磁盘读到内存 0x10000 位置
+    mov edi, 0x10000
+    mov ecx, 10
+    mov bl, 200
+    call read_disk
+
+    jmp dword code_selector:0x10000 ; 跳转到内核代码
+
+    ud2 ; 无效指令，用于调试
 
 jmp $
+
+
+read_disk:
+    ; 设置读写扇区数量
+    mov dx, 0x1f2;
+    mov al, bl
+    out dx, al
+    ; 设置读写扇区起始位置
+    mov dx, 0x1f3 ; 低 8 位
+    mov al, cl
+    out dx, al
+
+    mov dx, 0x1f4 ; 中 8 位
+    shr ecx, 8
+    mov al, cl
+    out dx, al
+
+    mov dx, 0x1f5 ; 高 8 位
+    shr ecx, 8
+    mov al, cl
+    out dx, al
+
+    mov dx, 0x1f6 ; LBA 模式 
+    shr ecx, 8
+    and cl, 0b00001111
+    mov al, 0b11100000
+    or al, cl
+    out dx, al
+
+    ; 读硬盘
+    mov dx, 0x1f7;
+    mov al, 0x20;
+    out dx, al
+
+    xor ecx, ecx;
+    mov cl, bl; 获取读取扇区数量
+
+    .read:
+        push cx
+        call .waits ; 等待数据准备好
+        call .reads ; 读取一个扇区
+        pop cx
+        ret
+    
+    .waits:
+        mov dx, 0x1f7
+        .check:
+            in al, dx
+            jmp $+2; nop; 消耗一些时钟周期
+            jmp $+2; nop; 消耗一些时钟周期
+            jmp $+2; nop; 消耗一些时钟周期
+            and al, 0b1000_1000
+            cmp al, 0b0000_1000
+            jnz .check
+        ret
+
+    .reads:
+        mov dx, 0x1f0
+        mov cx, 256; 一个扇区有 512 字节（256 个字）
+        .readw:
+            in ax, dx
+            jmp $+2; nop; 消耗一些时钟周期
+            jmp $+2; nop; 消耗一些时钟周期
+            jmp $+2; nop; 消耗一些时钟周期
+            mov [edi], ax
+            add edi, 2
+            loop .readw
+        ret
+
 
 
 code_selector equ (1 << 3)
@@ -114,15 +190,19 @@ gdt_code:
     dw memory_limit & 0xffff; 段界限 0 ~ 15 位
     dw memory_base & 0xffff; 基地址 0 ~ 15 位
     db (memory_base >> 16) & 0xff; 基地址 16 ~ 23 位
-    db 0b_1_00_1_1_0_1_0; P = 1, DPL = 0, S = 1, TYPE = 0b1010
-    db 0b1_1_0_0_0000 | ((memory_limit >> 16) & 0xf); G = 1, D/B = 1, L = 0, AVL = 0, 段界限 16 ~ 19 位
+    ; 存在 - dlp 0 - S _ 代码 - 非依从 - 可读 - 没有被访问过
+    db 0b_1_00_1_1_0_1_0;
+    ; 4k - 32 位 - 不是 64 位 - 段界限 16 ~ 19
+    db 0b1_1_0_0_0000 | (memory_limit >> 16) & 0xf;
     db (memory_base >> 24) & 0xff; 基地址 24 ~ 31 位
 gdt_data:
     dw memory_limit & 0xffff; 段界限 0 ~ 15 位
     dw memory_base & 0xffff; 基地址 0 ~ 15 位
     db (memory_base >> 16) & 0xff; 基地址 16 ~ 23 位
-    db 0b_1_00_1_0_0_1_0; P = 1, DPL = 0, S = 1, TYPE = 0b1010
-    db 0b1_1_0_0_0000 | ((memory_limit >> 16) & 0xf); G = 1, D/B = 1, L = 0, AVL = 0, 段界限 16 ~ 19 位
+    ; 存在 - dlp 0 - S _ 数据 - 向上 - 可写 - 没有被访问过
+    db 0b_1_00_1_0_0_1_0;
+    ; 4k - 32 位 - 不是 64 位 - 段界限 16 ~ 19
+    db 0b1_1_0_0_0000 | (memory_limit >> 16) & 0xf;
     db (memory_base >> 24) & 0xff; 基地址 24 ~ 31 位
 gdt_end:
 
