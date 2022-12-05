@@ -16,7 +16,7 @@ detect_memory:
 
     mov edx, 0x534d4150 ; 'SMAP'
 
-.next
+.next:
     mov eax, 0xe820
     mov ecx, 0x20
     int 0x15
@@ -62,7 +62,7 @@ print:
     int 0x10
     inc si
     jmp .next
-.done
+.done:
     ret
 
 loading:

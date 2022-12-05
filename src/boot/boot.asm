@@ -166,7 +166,7 @@ print:
     int 0x10
     inc si
     jmp .next
-.done
+.done:
     ret
 
 booting:
