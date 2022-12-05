@@ -1,1 +1,1 @@
-qemu-system-x86_64 -m 128M -drive format=raw,file=main.img -s
+qemu-system-x86_64 -m 128M -drive format=raw,file=main.img  -smp 1,cores=1 -s

@@ -15,16 +15,13 @@ mov si, booting
 call print
 
 mov edi, 0x1000; 读取到的目标内存
-mov ecx, 0; 起始扇区
-mov bl, 1; 扇区数量
+mov ecx, 2; 起始扇区
+mov bl, 4; 扇区数量
 call read_disk
 
-mov edi, 0x1000;
-mov ecx, 2
-mov bl, 1
-call write_disk
-
-jmp $ ; 阻塞
+cmp word [0x1000], 0x55aa
+jnz error
+jmp 0:0x1002
 
 read_disk:
     ; 设置读写扇区数量
@@ -93,72 +90,72 @@ read_disk:
             loop .readw
         ret
 
-write_disk:
-    ; 设置读写扇区数量
-    mov dx, 0x1f2;
-    mov al, bl
-    out dx, al
-    ; 设置读写扇区起始位置
-    mov dx, 0x1f3 ; 低 8 位
-    mov al, cl
-    out dx, al
+; write_disk:
+;     ; 设置读写扇区数量
+;     mov dx, 0x1f2;
+;     mov al, bl
+;     out dx, al
+;     ; 设置读写扇区起始位置
+;     mov dx, 0x1f3 ; 低 8 位
+;     mov al, cl
+;     out dx, al
 
-    mov dx, 0x1f4 ; 中 8 位
-    shr ecx, 8
-    mov al, cl
-    out dx, al
+;     mov dx, 0x1f4 ; 中 8 位
+;     shr ecx, 8
+;     mov al, cl
+;     out dx, al
 
-    mov dx, 0x1f5 ; 高 8 位
-    shr ecx, 8
-    mov al, cl
-    out dx, al
+;     mov dx, 0x1f5 ; 高 8 位
+;     shr ecx, 8
+;     mov al, cl
+;     out dx, al
 
-    mov dx, 0x1f6 ; LBA 模式 
-    shr ecx, 8
-    and cl, 0b00001111
-    mov al, 0b11100000
-    or al, cl
-    out dx, al
+;     mov dx, 0x1f6 ; LBA 模式 
+;     shr ecx, 8
+;     and cl, 0b00001111
+;     mov al, 0b11100000
+;     or al, cl
+;     out dx, al
 
-    ; 写硬盘
-    mov dx, 0x1f7;
-    mov al, 0x30;
-    out dx, al
+;     ; 写硬盘
+;     mov dx, 0x1f7;
+;     mov al, 0x30;
+;     out dx, al
 
-    xor ecx, ecx;
-    mov cl, bl; 获取读写扇区数量
+;     xor ecx, ecx;
+;     mov cl, bl; 获取读写扇区数量
 
-    .write:
-        push cx
-        call .writes ; 写入一个扇区
-        call .waits ; 等待数据繁忙结束
-        pop cx
-        ret
+;     .write:
+;         push cx
+;         call .writes ; 写入一个扇区
+;         call .waits ; 等待数据繁忙结束
+;         pop cx
+;         ret
     
-    .waits:
-        mov dx, 0x1f7
-        .check:
-            in al, dx
-            jmp $+2; nop; 消耗一些时钟周期
-            jmp $+2; nop; 消耗一些时钟周期
-            jmp $+2; nop; 消耗一些时钟周期
-            and al, 0b1000_0000
-            cmp al, 0b0000_0000
-            jnz .check
-        ret
+;     .waits:
+;         mov dx, 0x1f7
+;         .check:
+;             in al, dx
+;             jmp $+2; nop; 消耗一些时钟周期
+;             jmp $+2; nop; 消耗一些时钟周期
+;             jmp $+2; nop; 消耗一些时钟周期
+;             and al, 0b1000_0000
+;             cmp al, 0b0000_0000
+;             jnz .check
+;         ret
 
-    .writes:
-        mov dx, 0x1f0
-        mov cx, 256; 一个扇区有 512 字节（256 个字）
-        .writew:
-            mov ax, [edi]
-            out dx, ax
-            jmp $+2; nop; 消耗一些时钟周期
-            jmp $+2; nop; 消耗一些时钟周期
-            jmp $+2; nop; 消耗一些时钟周期
-            add edi, 2
-            loop .writew
-        ret
+;     .writes:
+;         mov dx, 0x1f0
+;         mov cx, 256; 一个扇区有 512 字节（256 个字）
+;         .writew:
+;             mov ax, [edi]
+;             out dx, ax
+;             jmp $+2; nop; 消耗一些时钟周期
+;             jmp $+2; nop; 消耗一些时钟周期
+;             jmp $+2; nop; 消耗一些时钟周期
+;             add edi, 2
+;             loop .writew
+;         ret
 
 print:
     mov ah, 0x0e
@@ -174,6 +171,13 @@ print:
 
 booting:
     db "Booting H1KOS ...", 10, 13, 0; \n\r
+
+error:
+    mov si, .msg
+    call print
+    hlt
+    .msg db "Booting Error!", 10, 13, 0
+
 
 ; 主引导扇区必须有 512 字节
 ; 填充为 0
